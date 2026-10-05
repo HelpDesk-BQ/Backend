@@ -1,6 +1,8 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import { loadEnv } from './config/env.js';
+import { buildContainer } from './container.js';
 import { attachCorrelationId } from './middlewares/correlationId.js';
 import healthRoutes from './routes/health.routes.js';
 import { notFound } from './middlewares/notFound.js';
@@ -17,8 +19,9 @@ function buildCorsOptions(corsOrigins) {
   };
 }
 
-export function createApp({ corsOrigins = [] } = {}) {
+export function createApp({ corsOrigins = [], container = null } = {}) {
   const app = express();
+  const activeContainer = container || buildContainer(loadEnv(process.env));
 
   app.use(attachCorrelationId);
   app.use(helmet());
@@ -26,6 +29,7 @@ export function createApp({ corsOrigins = [] } = {}) {
   app.use(express.json({ limit: JSON_LIMIT }));
 
   app.use(healthRoutes);
+  app.use('/api', activeContainer.sessionRoutes);
   app.use(notFound);
   app.use(errorHandler);
 

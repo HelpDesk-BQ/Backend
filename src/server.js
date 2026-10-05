@@ -1,10 +1,12 @@
 import 'dotenv/config';
 import { loadEnv } from './config/env.js';
+import { buildContainer } from './container.js';
 import { createApp } from './app.js';
 
 export function startServer() {
   const env = loadEnv(process.env);
-  const app = createApp({ corsOrigins: env.CORS_ORIGINS });
+  const container = buildContainer(env);
+  const app = createApp({ corsOrigins: env.CORS_ORIGINS, container });
 
   const server = app.listen(env.PORT, () => {
     // eslint-disable-next-line no-console

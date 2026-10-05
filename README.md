@@ -1,1 +1,238 @@
-# Backend
+# HelpDesk BQ — Backend
+
+API REST do sistema de chamados HelpDesk BQ (ETEC Bento Quirino — Operação Software Confiável).
+Node.js + Express em ESM, PostgreSQL com migrations versionadas, validação Zod,
+testes Jest + Supertest, arquitetura em camadas.
+
+## Índice
+
+1. [Stack](#1-stack)
+2. [Início rápido](#2-início-rápido)
+3. [Variáveis de ambiente](#3-variáveis-de-ambiente)
+4. [Rotas](#4-rotas)
+5. [Autenticação e bloqueio](#5-autenticação-e-bloqueio)
+6. [Contrato de erro](#6-contrato-de-erro)
+7. [Arquitetura](#7-arquitetura)
+8. [Banco de dados](#8-banco-de-dados)
+9. [Testes e qualidade](#9-testes-e-qualidade)
+10. [Segurança](#10-segurança)
+
+## 1. Stack
+
+| Camada      | Tecnologia                          |
+| ----------- | ----------------------------------- |
+| Runtime     | Node.js 22 (ESM, `import`/`export`) |
+| HTTP        | Express 5 + Helmet + CORS           |
+| Validação   | Zod                                 |
+| Banco       | PostgreSQL (`pg`, sem ORM)          |
+| Migrations  | `node-pg-migrate` (SQL versionado)  |
+| Auth        | `bcrypt` (hash) + `jsonwebtoken`    |
+| Testes      | Jest + Supertest                     |
+| Lint        | ESLint                              |
+
+## 2. Início rápido
+
+```bash
+cp .env.example .env   # ajuste DATABASE_URL e JWT_SECRET
+npm install
+npm run db:create      # cria o banco local (lê DATABASE_URL)
+npm run migrate        # aplica migrations versionadas
+npm run db:seed        # usuários fictícios por papel
+npm run dev            # sobe em PORT (padrão 3000)
+```
+
+```bash
+npm test               # testes (sem banco: usa fakes)
+npm run test:coverage  # testes + cobertura (mínimo global 70%)
+npm run lint           # padrão estático (src, tests, scripts)
+npm run migrate:down   # reverte a última migration
+```
+
+Base local: `http://localhost:3000`.
+
+## 3. Variáveis de ambiente
+
+| Variável         | Padrão (dev)                                            | Obrigatória em produção              |
+| ---------------- | ------------------------------------------------------- | ------------------------------------ |
+| `NODE_ENV`       | `development`                                           | —                                    |
+| `PORT`           | `3000`                                                  | —                                    |
+| `DATABASE_URL`   | `postgres://postgres:postgres@localhost:5432/helpdesk`  | sim (URL real, sem placeholder)      |
+| `CORS_ORIGIN`    | `http://localhost:5500,http://127.0.0.1:5500` (lista `,`) | sim (origens do frontend)            |
+| `JWT_SECRET`     | segredo somente-dev                                     | sim (aleatório, ≥ 32 caracteres)     |
+| `JWT_EXPIRES_IN` | `1h` (formato `\d+[smhd]`)                              | —                                    |
+| `BCRYPT_COST`    | `12` (4–15)                                             | —                                    |
+
+Atenção: senha com `#` (ou `@`, `?`, `%`) na `DATABASE_URL` precisa de
+percent-encoding (`#` → `%23`), pois aspas no `.env` não protegem a URL.
+
+## 4. Rotas
+
+Prefixo da API: `/api`. Todas as respostas carregam o header
+`X-Correlation-Id` (eche o valor enviado ou gera um uuid-v4).
+
+### 4.1 `GET /health`
+
+Sonda de vida. Não toca no banco, não exige autenticação.
+
+```bash
+curl -i http://localhost:3000/health
+```
+
+```http
+HTTP/1.1 200 OK
+X-Correlation-Id: 55e80056-30e0-4958-8ac4-403fda005a2e
+
+{ "status": "ok" }
+```
+
+### 4.2 `POST /api/sessions` — login (RF01, RF02)
+
+Autentica usuário ativo e devolve token JWT Bearer + usuário público
+(sem `password_hash`).
+
+Body (JSON, objeto estrito — campos extras são rejeitados):
+
+```json
+{ "email": "lia@exemplo.local", "password": "Solicitante123!" }
+```
+
+```bash
+curl -i -X POST http://localhost:3000/api/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"lia@exemplo.local","password":"Solicitante123!"}'
+```
+
+Sucesso:
+
+```http
+HTTP/1.1 200 OK
+
+{
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": "9d331132-6c50-4eee-a9be-9d6749359e49",
+      "name": "Lia Solicitante",
+      "email": "lia@exemplo.local",
+      "role": "requester",
+      "active": true
+    }
+  }
+}
+```
+
+Falhas (mensagens genéricas — nunca revelam se o e-mail existe):
+
+| Situação                          | HTTP | `code`                |
+| --------------------------------- | ---- | --------------------- |
+| Credencial inválida / e-mail inexistente / conta inativa | 401 | `INVALID_CREDENTIALS` (`Credenciais inválidas.`) |
+| Conta bloqueada (3 falhas/5min → 10min) | 423 | `ACCOUNT_LOCKED` (`Acesso temporariamente indisponível.`) |
+| Body malformado (e-mail inválido, campo ausente/extra) | 400 | `VALIDATION_ERROR` (`Revise os campos destacados.`) |
+
+### 4.3 Rotas autenticadas (padrão das próximas entregas)
+
+Rota protegida exige:
+
+```http
+Authorization: Bearer <token>
+```
+
+Sem header, com esquema diferente de `Bearer` ou token inválido/alterado/expirado:
+
+```http
+HTTP/1.1 401 Unauthorized
+
+{ "error": { "code": "UNAUTHORIZED", "message": "Autenticação necessária.", "correlationId": "..." } }
+```
+
+### 4.4 Erros de infraestrutura (todas as rotas)
+
+| Situação                         | HTTP | `code`              |
+| -------------------------------- | ---- | ------------------- |
+| Rota inexistente                 | 404  | `NOT_FOUND`         |
+| JSON malformado                  | 400  | `INVALID_JSON`      |
+| Payload acima de 100 KB          | 413  | `PAYLOAD_TOO_LARGE` |
+| Falha inesperada (log interno)   | 500  | `INTERNAL_ERROR`    |
+
+## 5. Autenticação e bloqueio
+
+- Senha verificada com `bcrypt.compare`; banco guarda só `password_hash`.
+- E-mail normalizado (trim + minúsculas) antes de qualquer consulta.
+- Janela deslizante por e-mail: **3 falhas em 5 min bloqueiam por 10 min**
+  (contados da última falha). A 3ª falha já responde `423`.
+- Conta bloqueada + senha correta continua `423` **sem** validar a senha
+  (não reinicia o prazo silenciosamente).
+- Falhas antigas (> 5 min) não contam; sucesso registra tentativa `success=true`.
+- Tentativas de e-mail inexistente são registradas com `user_id` nulo —
+  mesma resposta `401`, sem enumeração (RF02 + Gherkin do Passo 13 do PDF).
+- Token JWT: payload `{ sub: userId, role }`, expiração `JWT_EXPIRES_IN`.
+- Relógio injetável no serviço (`now`) — testes controlam o tempo sem `sleep`.
+
+Usuários do seed (`npm run db:seed`, senhas só para dev):
+
+| E-mail                  | Papel        | Senha             |
+| ----------------------- | ------------ | ----------------- |
+| `admin@exemplo.local`   | `admin`      | `Admin123!`       |
+| `tecnico@exemplo.local` | `technician` | `Tecnico123!`     |
+| `lia@exemplo.local`     | `requester`  | `Solicitante123!` |
+
+## 6. Contrato de erro
+
+Formato único (PDF, Passo 20), sempre com `correlationId` igual ao header:
+
+```json
+{ "error": { "code": "ACCOUNT_LOCKED", "message": "Acesso temporariamente indisponível.", "correlationId": "req_7f31..." } }
+```
+
+Regras: `code` estável em SNAKE_CASE; `message` segura e PT-BR para o usuário;
+detalhes (`stack`, SQL, token, hash) ficam só no log interno, nunca na resposta.
+`AppError(status, code, message)` para erros operacionais; qualquer outro erro
+vira `500 INTERNAL_ERROR` genérico. `ZodError` vira `400 VALIDATION_ERROR`.
+
+## 7. Arquitetura
+
+```
+HTTP → routes → controllers (finos) → services (regras, sem HTTP)
+     → repositories (SQL parametrizado) → PostgreSQL (pg Pool)
+```
+
+- `src/app.js` compõe o Express **sem** abrir porta (`createApp({ corsOrigins, container })`
+  aceita container injetado — testabilidade, Passo 22 do PDF).
+- `src/server.js` só faz `listen` + shutdown gracioso (`SIGTERM`/`SIGINT`).
+- `src/container.js` monta as dependências reais (`bcrypt`, `jsonwebtoken`, `pg`);
+  testes injetam fakes.
+- Código 100% em inglês; comentários raros e em PT-BR, só para o *porquê*.
+- Serviços puros e testáveis sem servidor HTTP; repositórios substituíveis por
+  dublês; `loadEnv(source)` puro para configuração.
+
+## 8. Banco de dados
+
+Tabelas (migrations em `migrations/`, `up` + `down`):
+
+- `users(id, name, email UNIQUE, password_hash, role CHECK requester|technician|admin, active, created_at, updated_at)` + índice único em `email`.
+- `login_attempts(id, user_id → users NULL ON DELETE CASCADE, email, success, created_at)` + índices `(email, created_at)` e `(user_id, created_at)` (janela de bloqueio).
+- `pgcrypto` para `gen_random_uuid()`; datas `timestamptz` (UTC).
+
+Fluxo: `npm run db:create` → `npm run migrate` → `npm run db:seed`.
+Testes unitários/API **não** tocam o banco (fakes); integração real é manual
+contra o banco local.
+
+## 9. Testes e qualidade
+
+```
+tests/unit         → regras puras (authService, env, correlation, AppError, repositories, container)
+tests/integration  → contrato HTTP (errors, hardening, health, sessions, requireAuth)
+```
+
+- TDD/Shift-Left: testes antes do código nos fluxos críticos; relógio e dependências
+  injetáveis; cada teste tem um motivo de falha.
+- Cobertura atual: **~98% linhas / ~80% branches** (gate: ≥ 70% global, 100% das regras críticas).
+- CI esperada (PDF, Passo 37): `npm ci` → `lint` → `test --coverage` → `audit --audit-level=high`; PR vermelho não mescla.
+
+## 10. Segurança
+
+- Helmet (headers), CORS por allowlist via env (sem `*`), JSON limitado a `100kb`.
+- Queries 100% parametrizadas (`$1`); e-mail normalizado; nada de SQL concatenado.
+- Nenhum segredo no repo (`.env` ignorado, `.env.example` sem valores reais).
+- Logs: evento/resultado/`correlationId`; nunca senha, token ou corpo sensível.
+- `npm audit --audit-level=high`: 0 vulnerabilidades (base 2026-10-05).

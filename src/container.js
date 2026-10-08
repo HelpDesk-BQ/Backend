@@ -3,7 +3,10 @@ import jwt from 'jsonwebtoken';
 import * as userRepository from './repositories/userRepository.js';
 import * as loginAttemptRepository from './repositories/loginAttemptRepository.js';
 import { createAuthService } from './services/authService.js';
+import * as ticketRepository from './repositories/ticketRepository.js';
+import { createTicketService } from './services/ticketService.js';
 import { createSessionRoutes } from './routes/session.routes.js';
+import { createTicketRoutes } from './routes/ticket.routes.js';
 import { createRequireAuth } from './middlewares/requireAuth.js';
 
 export function buildContainer(env) {
@@ -19,9 +22,14 @@ export function buildContainer(env) {
       jwt.verify(token, env.JWT_SECRET, (error, decoded) => (error ? reject(error) : resolve(decoded)));
     });
 
+  const ticketService = createTicketService({ ticketRepository });
+  const requireAuth = createRequireAuth({ verifyToken });
+
   return {
     authService,
-    requireAuth: createRequireAuth({ verifyToken }),
+    ticketService,
+    requireAuth,
     sessionRoutes: createSessionRoutes({ authService }),
+    ticketRoutes: createTicketRoutes({ ticketService, requireAuth }),
   };
 }

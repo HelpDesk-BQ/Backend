@@ -29,7 +29,12 @@ export function createApp({ corsOrigins = [], container = null } = {}) {
   app.use(express.json({ limit: JSON_LIMIT }));
 
   app.use(healthRoutes);
-  app.use('/api', activeContainer.sessionRoutes);
+  if (activeContainer.sessionRoutes) {
+    app.use('/api', activeContainer.sessionRoutes);
+  }
+  if (activeContainer.ticketRoutes) {
+    app.use('/api', activeContainer.ticketRoutes);
+  }
   app.use(notFound);
   app.use(errorHandler);
 

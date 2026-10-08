@@ -197,5 +197,25 @@ export function createTicketService({
     });
   }
 
-  return { create, list, getById, changeStatus, addComment, listComments, listHistory, remove, changePriority, changeAssignee };
+  async function getSummary({ status, priority }, requester) {
+    const args = { status, priority };
+    if (requester.role === 'requester') {
+      args.requesterId = requester.id;
+    }
+    return ticketRepository.summary(args);
+  }
+
+  return {
+    create,
+    list,
+    getById,
+    changeStatus,
+    addComment,
+    listComments,
+    listHistory,
+    remove,
+    changePriority,
+    changeAssignee,
+    getSummary,
+  };
 }

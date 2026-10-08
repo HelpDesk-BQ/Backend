@@ -48,3 +48,8 @@ export const changeTicketAssigneeSchema = z
     assigneeId: z.string().trim().min(1).max(100).nullable(),
   })
   .strict();
+
+export const reportSummarySchema = z.object({
+  status: z.enum(STATUSES).optional(),
+  priority: z.enum(PRIORITIES).optional(),
+});

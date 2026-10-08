@@ -36,3 +36,15 @@ export const deleteTicketSchema = z
     justification: z.string().trim().min(1).max(1000),
   })
   .strict();
+
+export const changeTicketPrioritySchema = z
+  .object({
+    priority: z.enum(PRIORITIES),
+  })
+  .strict();
+
+export const changeTicketAssigneeSchema = z
+  .object({
+    assigneeId: z.string().trim().min(1).max(100).nullable(),
+  })
+  .strict();

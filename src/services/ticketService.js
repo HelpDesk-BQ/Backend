@@ -2,6 +2,7 @@ import { AppError } from '../utils/AppError.js';
 import { assertTransition } from './transition.js';
 import * as defaultCommentRepository from '../repositories/commentRepository.js';
 import * as defaultHistoryRepository from '../repositories/historyRepository.js';
+import * as defaultUserRepository from '../repositories/userRepository.js';
 import { withTransaction as defaultWithTransaction } from '../db/pool.js';
 
 const DEFAULT_PAGE = 1;
@@ -51,6 +52,7 @@ export function createTicketService({
   ticketRepository,
   commentRepository = defaultCommentRepository,
   historyRepository = defaultHistoryRepository,
+  userRepository = defaultUserRepository,
   withTransaction = defaultWithTransaction,
 }) {
   async function create({ title, description, priority }, requester) {
@@ -155,5 +157,45 @@ export function createTicketService({
     });
   }
 
-  return { create, list, getById, changeStatus, addComment, listComments, listHistory, remove };
+  async function changePriority(id, { priority }, requester) {
+    const ticket = await ticketRepository.findById(id);
+    assertCanChangeStatus(ticket, requester);
+    if (ticket.priority === priority) {
+      return { ticket, changed: false };
+    }
+    return withTransaction(async (tx) => {
+      const updated = await ticketRepository.updatePriority({ id, priority }, tx);
+      await historyRepository.create(
+        { ticketId: id, actorId: requester.id, event: 'priority.changed', before: ticket.priority, after: priority },
+        tx
+      );
+      return { ticket: updated, changed: true };
+    });
+  }
+
+  async function changeAssignee(id, { assigneeId }, requester) {
+    const ticket = await ticketRepository.findById(id);
+    assertCanChangeStatus(ticket, requester);
+    const nextAssigneeId = assigneeId?.trim() ? assigneeId.trim() : null;
+    if (nextAssigneeId) {
+      const assignee = await userRepository.findById(nextAssigneeId);
+      if (!assignee) {
+        throw new AppError(404, 'NOT_FOUND', 'Recurso não encontrado.');
+      }
+    }
+    const before = ticket.assignee_id || null;
+    if (before === nextAssigneeId) {
+      return { ticket, changed: false };
+    }
+    return withTransaction(async (tx) => {
+      const updated = await ticketRepository.updateAssignee({ id, assigneeId: nextAssigneeId }, tx);
+      await historyRepository.create(
+        { ticketId: id, actorId: requester.id, event: 'assignee.changed', before, after: nextAssigneeId },
+        tx
+      );
+      return { ticket: updated, changed: true };
+    });
+  }
+
+  return { create, list, getById, changeStatus, addComment, listComments, listHistory, remove, changePriority, changeAssignee };
 }

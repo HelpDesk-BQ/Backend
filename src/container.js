@@ -29,6 +29,7 @@ export function buildContainer(env) {
     ticketRepository,
     commentRepository,
     historyRepository,
+    userRepository,
     withTransaction,
   });
   const requireAuth = createRequireAuth({ verifyToken });

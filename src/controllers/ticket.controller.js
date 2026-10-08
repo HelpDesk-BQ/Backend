@@ -4,6 +4,8 @@ import {
   changeTicketStatusSchema,
   createCommentSchema,
   deleteTicketSchema,
+  changeTicketPrioritySchema,
+  changeTicketAssigneeSchema,
 } from '../schemas/ticket.schema.js';
 
 export function createTicketController({ ticketService }) {
@@ -84,6 +86,26 @@ export function createTicketController({ ticketService }) {
     }
   }
 
+  async function changePriority(req, res, next) {
+    try {
+      const input = changeTicketPrioritySchema.parse(req.body);
+      const result = await ticketService.changePriority(req.params.id, input, req.user);
+      return res.status(200).json({ data: result });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async function changeAssignee(req, res, next) {
+    try {
+      const input = changeTicketAssigneeSchema.parse(req.body);
+      const result = await ticketService.changeAssignee(req.params.id, input, req.user);
+      return res.status(200).json({ data: result });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   return {
     createTicket,
     listTickets,
@@ -93,5 +115,7 @@ export function createTicketController({ ticketService }) {
     listComments,
     listHistory,
     removeTicket,
+    changePriority,
+    changeAssignee,
   };
 }

@@ -135,5 +135,25 @@ export function createTicketService({
     return historyRepository.listByTicket(id);
   }
 
-  return { create, list, getById, changeStatus, addComment, listComments, listHistory };
+  async function remove(id, { justification }, requester) {
+    const ticket = await ticketRepository.findById(id);
+    if (!ticket) {
+      throw new AppError(404, 'NOT_FOUND', 'Recurso não encontrado.');
+    }
+    // Somente administrador exclui, com justificativa e auditoria (RF07).
+    if (requester.role !== 'admin') {
+      throw new AppError(403, 'FORBIDDEN', 'Ação não autorizada.');
+    }
+    const trimmed = justification.trim();
+    return withTransaction(async (tx) => {
+      const deleted = await ticketRepository.softDelete(id, tx);
+      await historyRepository.create(
+        { ticketId: id, actorId: requester.id, event: 'deleted', before: ticket.status, after: trimmed },
+        tx
+      );
+      return deleted;
+    });
+  }
+
+  return { create, list, getById, changeStatus, addComment, listComments, listHistory, remove };
 }

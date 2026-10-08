@@ -31,6 +31,16 @@ export async function updateStatus({ id, status }, db = { query }) {
   return result.rows[0] || null;
 }
 
+export async function softDelete(id, db = { query }) {
+  const result = await db.query(
+    `UPDATE tickets SET deleted_at = now(), updated_at = now()
+     WHERE id = $1 AND deleted_at IS NULL
+     RETURNING ${TICKET_COLUMNS}`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
 function buildFilters({ status, priority, requesterId }) {
   const conditions = ['deleted_at IS NULL'];
   const values = [];

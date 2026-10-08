@@ -30,3 +30,9 @@ export const createCommentSchema = z
     body: z.string().trim().min(1).max(1000),
   })
   .strict();
+
+export const deleteTicketSchema = z
+  .object({
+    justification: z.string().trim().min(1).max(1000),
+  })
+  .strict();

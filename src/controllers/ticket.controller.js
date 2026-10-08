@@ -3,6 +3,7 @@ import {
   listTicketsSchema,
   changeTicketStatusSchema,
   createCommentSchema,
+  deleteTicketSchema,
 } from '../schemas/ticket.schema.js';
 
 export function createTicketController({ ticketService }) {
@@ -73,6 +74,16 @@ export function createTicketController({ ticketService }) {
     }
   }
 
+  async function removeTicket(req, res, next) {
+    try {
+      const input = deleteTicketSchema.parse(req.body);
+      const ticket = await ticketService.remove(req.params.id, input, req.user);
+      return res.status(200).json({ data: ticket });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   return {
     createTicket,
     listTickets,
@@ -81,5 +92,6 @@ export function createTicketController({ ticketService }) {
     addComment,
     listComments,
     listHistory,
+    removeTicket,
   };
 }

@@ -12,6 +12,7 @@ export function createTicketRoutes({ ticketService, requireAuth }) {
   router.post('/tickets/:id/comments', requireAuth, controller.addComment);
   router.get('/tickets/:id/comments', requireAuth, controller.listComments);
   router.get('/tickets/:id/history', requireAuth, controller.listHistory);
+  router.delete('/tickets/:id', requireAuth, controller.removeTicket);
 
   return router;
 }

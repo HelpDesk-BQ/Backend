@@ -4,6 +4,9 @@ import * as userRepository from './repositories/userRepository.js';
 import * as loginAttemptRepository from './repositories/loginAttemptRepository.js';
 import { createAuthService } from './services/authService.js';
 import * as ticketRepository from './repositories/ticketRepository.js';
+import * as commentRepository from './repositories/commentRepository.js';
+import * as historyRepository from './repositories/historyRepository.js';
+import { withTransaction } from './db/pool.js';
 import { createTicketService } from './services/ticketService.js';
 import { createSessionRoutes } from './routes/session.routes.js';
 import { createTicketRoutes } from './routes/ticket.routes.js';
@@ -22,7 +25,12 @@ export function buildContainer(env) {
       jwt.verify(token, env.JWT_SECRET, (error, decoded) => (error ? reject(error) : resolve(decoded)));
     });
 
-  const ticketService = createTicketService({ ticketRepository });
+  const ticketService = createTicketService({
+    ticketRepository,
+    commentRepository,
+    historyRepository,
+    withTransaction,
+  });
   const requireAuth = createRequireAuth({ verifyToken });
 
   return {

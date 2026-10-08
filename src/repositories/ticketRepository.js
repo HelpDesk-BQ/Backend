@@ -21,6 +21,16 @@ export async function findById(id, db = { query }) {
   return result.rows[0] || null;
 }
 
+export async function updateStatus({ id, status }, db = { query }) {
+  const result = await db.query(
+    `UPDATE tickets SET status = $2, updated_at = now()
+     WHERE id = $1 AND deleted_at IS NULL
+     RETURNING ${TICKET_COLUMNS}`,
+    [id, status]
+  );
+  return result.rows[0] || null;
+}
+
 function buildFilters({ status, priority, requesterId }) {
   const conditions = ['deleted_at IS NULL'];
   const values = [];

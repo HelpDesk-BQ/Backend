@@ -1,4 +1,9 @@
-import { createTicketSchema, listTicketsSchema } from '../schemas/ticket.schema.js';
+import {
+  createTicketSchema,
+  listTicketsSchema,
+  changeTicketStatusSchema,
+  createCommentSchema,
+} from '../schemas/ticket.schema.js';
 
 export function createTicketController({ ticketService }) {
   async function createTicket(req, res, next) {
@@ -30,5 +35,51 @@ export function createTicketController({ ticketService }) {
     }
   }
 
-  return { createTicket, listTickets, getTicketById };
+  async function changeTicketStatus(req, res, next) {
+    try {
+      const input = changeTicketStatusSchema.parse(req.body);
+      const result = await ticketService.changeStatus(req.params.id, input, req.user);
+      return res.status(200).json({ data: result });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async function addComment(req, res, next) {
+    try {
+      const input = createCommentSchema.parse(req.body);
+      const comment = await ticketService.addComment(req.params.id, input, req.user);
+      return res.status(201).json({ data: comment });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async function listComments(req, res, next) {
+    try {
+      const comments = await ticketService.listComments(req.params.id, req.user);
+      return res.status(200).json({ data: comments });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async function listHistory(req, res, next) {
+    try {
+      const history = await ticketService.listHistory(req.params.id, req.user);
+      return res.status(200).json({ data: history });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  return {
+    createTicket,
+    listTickets,
+    getTicketById,
+    changeTicketStatus,
+    addComment,
+    listComments,
+    listHistory,
+  };
 }

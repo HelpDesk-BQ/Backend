@@ -35,6 +35,23 @@ export function query(text, params) {
   return getPool().query(text, params);
 }
 
+export async function withTransaction(work, pool = null) {
+  const activePool = pool || getPool();
+  const client = await activePool.connect();
+  try {
+    await client.query('BEGIN');
+    const tx = { query: (text, params) => client.query(text, params) };
+    const result = await work(tx);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function closePool() {
   if (sharedPool) {
     await sharedPool.end();

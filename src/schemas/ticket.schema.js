@@ -17,3 +17,16 @@ export const listTicketsSchema = z.object({
   page: z.coerce.number().optional(),
   limit: z.coerce.number().optional(),
 });
+
+export const changeTicketStatusSchema = z
+  .object({
+    status: z.enum(STATUSES),
+    comment: z.string().trim().min(1).max(1000).optional(),
+  })
+  .strict();
+
+export const createCommentSchema = z
+  .object({
+    body: z.string().trim().min(1).max(1000),
+  })
+  .strict();

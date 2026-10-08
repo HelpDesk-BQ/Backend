@@ -206,7 +206,44 @@ curl -X POST http://localhost:3000/api/tickets/<id>/comments \
 
 Mesma visibilidade do detalhe; `200 { data: [...] }` em ordem cronológica.
 
-### 4.9 Rotas autenticadas (padrão geral)
+### 4.9 `DELETE /api/tickets/:id` — exclusão lógica (RF07)
+
+Somente admin. Exige `justification` (1–1000, vira `ticket_history` evento `deleted`).
+
+```bash
+curl -X DELETE http://localhost:3000/api/tickets/<id> \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"justification":"Chamado duplicado."}'
+```
+
+`200` com o chamado (`deleted_at` preenchido); não-admin → `403`; sem justificativa → `400`.
+Excluídos somem de lista/detalhe/filtros/relatórios (`deleted_at IS NULL`).
+
+### 4.10 `PATCH /api/tickets/:id/priority` e `/assignee` — (RF08)
+
+Técnico/admin (mesmo RBAC da transição). Cada troca grava `ticket_history`
+(`priority.changed` / `assignee.changed`) na mesma transação; valor igual retorna
+`{ changed: false }` sem histórico. `assigneeId` aceita `null` (desatribuir);
+responsável inexistente → `404`.
+
+### 4.11 `GET /api/reports/summary` — totais (RF13)
+
+Query opcional `status?`/`priority?`; solicitante restrito aos próprios.
+`200 { data: { total, byStatus, byPriority } }`; estado vazio = `total: 0` com mapas vazios.
+
+```bash
+curl -s "http://localhost:3000/api/reports/summary?status=open" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### 4.12 Logs estruturados (RNF07)
+
+`src/utils/logger.js`: `{ level, event, timestamp, correlationId, route, status, ... }`
+em JSON por linha no stdout. Eventos: `session.created`, `ticket.created`,
+`ticket.status.changed`, `comment.added`, `ticket.deleted`. Nunca senha, token ou corpo sensível.
+
+### 4.13 Rotas autenticadas (padrão geral)
 
 Rota protegida exige:
 
@@ -222,7 +259,7 @@ HTTP/1.1 401 Unauthorized
 { "error": { "code": "UNAUTHORIZED", "message": "Autenticação necessária.", "correlationId": "..." } }
 ```
 
-### 4.10 Erros de infraestrutura (todas as rotas)
+### 4.14 Erros de infraestrutura (todas as rotas)
 
 | Situação                         | HTTP | `code`              |
 | -------------------------------- | ---- | ------------------- |
@@ -294,6 +331,9 @@ Tabelas (migrations em `migrations/`, `up` + `down`):
 - `pgcrypto` para `gen_random_uuid()`; datas `timestamptz` (UTC).
 
 Fluxo: `npm run db:create` → `npm run migrate` → `npm run db:seed`.
+Seed demo (A12, idempotente): 3 usuários por papel + 12 chamados
+(3 open, 3 analysis, 3 in_progress, 2 resolved, 1 closed; prioridades distribuídas,
+inclui 2 críticos).
 Testes unitários/API **não** tocam o banco (fakes); integração real é manual
 contra o banco local.
 
@@ -306,8 +346,10 @@ tests/integration  → contrato HTTP (errors, hardening, health, sessions, ticke
 
 - TDD/Shift-Left: testes antes do código nos fluxos críticos; relógio e dependências
   injetáveis; cada teste tem um motivo de falha.
-- Cobertura atual: **~98% linhas / ~80% branches** (gate: ≥ 70% global, 100% das regras críticas).
-- CI esperada (PDF, Passo 37): `npm ci` → `lint` → `test --coverage` → `audit --audit-level=high`; PR vermelho não mescla.
+- Cobertura atual: **~90% linhas / ~76% branches** (gate: ≥ 70% global, 100% das regras críticas).
+- CI (RNF08, `.github/workflows/ci.yml`, Node 22): `npm ci` → `lint` → `test:coverage` → `audit --audit-level=high`; PR vermelho não mescla.
+- Desempenho (RNF01, evidência em `evidencias/2026-10-08_perf_RNF01_carga-20vu.md`): 2100 reqs, 20 VUs,
+  0 erros 5xx, **p95 = 31 ms** (gate ≤ 800 ms). Reprodução: `npm run dev` + `npm run perf`.
 
 ## 10. Segurança
 

@@ -168,7 +168,45 @@ Regra de visibilidade: solicitante recebe só os próprios (filtro de dono forç
 
 `200` com o chamado; inexistente ou excluído → `404 NOT_FOUND`; de outro dono (solicitante) ou fechado (técnico) → `403 FORBIDDEN` (`Ação não autorizada.`).
 
-### 4.6 Rotas autenticadas (padrão geral)
+### 4.6 `PATCH /api/tickets/:id/status` — transição (RF08, RF11, RF12)
+
+Técnico/admin. Solicitante sempre `403`. Técnico em `closed` → `403` (fora da fila).
+
+```bash
+curl -X PATCH http://localhost:3000/api/tickets/<id>/status \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"status":"analysis"}'
+```
+
+```json
+{ "data": { "ticket": { "id": "...", "status": "analysis" }, "comment": null } }
+```
+
+Regras: mapa `open→analysis→in_progress→resolved→closed` (+ `resolved→in_progress` reabertura);
+salto inválido → `409 INVALID_STATE`; `→closed` sem `comment` não-branco → `409 RESOLUTION_COMMENT_REQUIRED`
+(cobre RF12 do crítico). `comment` opcional (1–1000) vira linha em `comments`
+(`is_resolution=true` em `resolved`/`closed`); toda troca grava `ticket_history`
+(`status.changed`) na mesma transação.
+
+### 4.7 `POST /api/tickets/:id/comments` — comentar (RF10)
+
+Mesma visibilidade do detalhe (dono/técnico não-fechado/admin). Body estrito `{ body }` trim 1–1000.
+
+```bash
+curl -X POST http://localhost:3000/api/tickets/<id>/comments \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"body":"Verificando o cabo de rede."}'
+```
+
+`201` com o comentário; grava `ticket_history` (`comment.added`) na mesma transação.
+
+### 4.8 `GET /api/tickets/:id/comments` e `/history` — leitura
+
+Mesma visibilidade do detalhe; `200 { data: [...] }` em ordem cronológica.
+
+### 4.9 Rotas autenticadas (padrão geral)
 
 Rota protegida exige:
 
@@ -184,7 +222,7 @@ HTTP/1.1 401 Unauthorized
 { "error": { "code": "UNAUTHORIZED", "message": "Autenticação necessária.", "correlationId": "..." } }
 ```
 
-### 4.7 Erros de infraestrutura (todas as rotas)
+### 4.10 Erros de infraestrutura (todas as rotas)
 
 | Situação                         | HTTP | `code`              |
 | -------------------------------- | ---- | ------------------- |

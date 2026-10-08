@@ -7,12 +7,22 @@ import {
   changeTicketPrioritySchema,
   changeTicketAssigneeSchema,
 } from '../schemas/ticket.schema.js';
+import { logger } from '../utils/logger.js';
 
 export function createTicketController({ ticketService }) {
   async function createTicket(req, res, next) {
+    const startedAt = Date.now();
     try {
       const input = createTicketSchema.parse(req.body);
       const ticket = await ticketService.create(input, req.user);
+      logger.info('ticket.created', {
+        correlationId: req.correlationId,
+        route: 'POST /api/tickets',
+        status: 201,
+        ticketId: ticket.id,
+        actorId: req.user.id,
+        durationMs: Date.now() - startedAt,
+      });
       return res.status(201).json({ data: ticket });
     } catch (error) {
       return next(error);
@@ -39,9 +49,19 @@ export function createTicketController({ ticketService }) {
   }
 
   async function changeTicketStatus(req, res, next) {
+    const startedAt = Date.now();
     try {
       const input = changeTicketStatusSchema.parse(req.body);
       const result = await ticketService.changeStatus(req.params.id, input, req.user);
+      logger.info('ticket.status.changed', {
+        correlationId: req.correlationId,
+        route: 'PATCH /api/tickets/:id/status',
+        status: 200,
+        ticketId: req.params.id,
+        actorId: req.user.id,
+        to: input.status,
+        durationMs: Date.now() - startedAt,
+      });
       return res.status(200).json({ data: result });
     } catch (error) {
       return next(error);
@@ -52,6 +72,13 @@ export function createTicketController({ ticketService }) {
     try {
       const input = createCommentSchema.parse(req.body);
       const comment = await ticketService.addComment(req.params.id, input, req.user);
+      logger.info('comment.added', {
+        correlationId: req.correlationId,
+        route: 'POST /api/tickets/:id/comments',
+        status: 201,
+        ticketId: req.params.id,
+        actorId: req.user.id,
+      });
       return res.status(201).json({ data: comment });
     } catch (error) {
       return next(error);
@@ -80,6 +107,13 @@ export function createTicketController({ ticketService }) {
     try {
       const input = deleteTicketSchema.parse(req.body);
       const ticket = await ticketService.remove(req.params.id, input, req.user);
+      logger.info('ticket.deleted', {
+        correlationId: req.correlationId,
+        route: 'DELETE /api/tickets/:id',
+        status: 200,
+        ticketId: req.params.id,
+        actorId: req.user.id,
+      });
       return res.status(200).json({ data: ticket });
     } catch (error) {
       return next(error);

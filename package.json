@@ -12,7 +12,8 @@
     "migrate": "node scripts/migrate.js up",
     "migrate:down": "node scripts/migrate.js down",
     "db:create": "node scripts/create-db.mjs",
-    "db:seed": "node scripts/seed.mjs"
+    "db:seed": "node scripts/seed.mjs",
+    "perf": "node scripts/perf-rnf01.mjs"
   },
   "repository": {
     "type": "git",

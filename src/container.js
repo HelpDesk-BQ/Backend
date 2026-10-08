@@ -8,6 +8,7 @@ import * as commentRepository from './repositories/commentRepository.js';
 import * as historyRepository from './repositories/historyRepository.js';
 import { withTransaction } from './db/pool.js';
 import { createTicketService } from './services/ticketService.js';
+import { createReportRoutes } from './routes/report.routes.js';
 import { createSessionRoutes } from './routes/session.routes.js';
 import { createTicketRoutes } from './routes/ticket.routes.js';
 import { createRequireAuth } from './middlewares/requireAuth.js';
@@ -29,6 +30,7 @@ export function buildContainer(env) {
     ticketRepository,
     commentRepository,
     historyRepository,
+    userRepository,
     withTransaction,
   });
   const requireAuth = createRequireAuth({ verifyToken });
@@ -39,5 +41,6 @@ export function buildContainer(env) {
     requireAuth,
     sessionRoutes: createSessionRoutes({ authService }),
     ticketRoutes: createTicketRoutes({ ticketService, requireAuth }),
+    reportRoutes: createReportRoutes({ ticketService, requireAuth }),
   };
 }

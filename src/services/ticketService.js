@@ -2,6 +2,7 @@ import { AppError } from '../utils/AppError.js';
 import { assertTransition } from './transition.js';
 import * as defaultCommentRepository from '../repositories/commentRepository.js';
 import * as defaultHistoryRepository from '../repositories/historyRepository.js';
+import * as defaultUserRepository from '../repositories/userRepository.js';
 import { withTransaction as defaultWithTransaction } from '../db/pool.js';
 
 const DEFAULT_PAGE = 1;
@@ -51,6 +52,7 @@ export function createTicketService({
   ticketRepository,
   commentRepository = defaultCommentRepository,
   historyRepository = defaultHistoryRepository,
+  userRepository = defaultUserRepository,
   withTransaction = defaultWithTransaction,
 }) {
   async function create({ title, description, priority }, requester) {
@@ -135,5 +137,85 @@ export function createTicketService({
     return historyRepository.listByTicket(id);
   }
 
-  return { create, list, getById, changeStatus, addComment, listComments, listHistory };
+  async function remove(id, { justification }, requester) {
+    const ticket = await ticketRepository.findById(id);
+    if (!ticket) {
+      throw new AppError(404, 'NOT_FOUND', 'Recurso não encontrado.');
+    }
+    // Somente administrador exclui, com justificativa e auditoria (RF07).
+    if (requester.role !== 'admin') {
+      throw new AppError(403, 'FORBIDDEN', 'Ação não autorizada.');
+    }
+    const trimmed = justification.trim();
+    return withTransaction(async (tx) => {
+      const deleted = await ticketRepository.softDelete(id, tx);
+      await historyRepository.create(
+        { ticketId: id, actorId: requester.id, event: 'deleted', before: ticket.status, after: trimmed },
+        tx
+      );
+      return deleted;
+    });
+  }
+
+  async function changePriority(id, { priority }, requester) {
+    const ticket = await ticketRepository.findById(id);
+    assertCanChangeStatus(ticket, requester);
+    if (ticket.priority === priority) {
+      return { ticket, changed: false };
+    }
+    return withTransaction(async (tx) => {
+      const updated = await ticketRepository.updatePriority({ id, priority }, tx);
+      await historyRepository.create(
+        { ticketId: id, actorId: requester.id, event: 'priority.changed', before: ticket.priority, after: priority },
+        tx
+      );
+      return { ticket: updated, changed: true };
+    });
+  }
+
+  async function changeAssignee(id, { assigneeId }, requester) {
+    const ticket = await ticketRepository.findById(id);
+    assertCanChangeStatus(ticket, requester);
+    const nextAssigneeId = assigneeId?.trim() ? assigneeId.trim() : null;
+    if (nextAssigneeId) {
+      const assignee = await userRepository.findById(nextAssigneeId);
+      if (!assignee) {
+        throw new AppError(404, 'NOT_FOUND', 'Recurso não encontrado.');
+      }
+    }
+    const before = ticket.assignee_id || null;
+    if (before === nextAssigneeId) {
+      return { ticket, changed: false };
+    }
+    return withTransaction(async (tx) => {
+      const updated = await ticketRepository.updateAssignee({ id, assigneeId: nextAssigneeId }, tx);
+      await historyRepository.create(
+        { ticketId: id, actorId: requester.id, event: 'assignee.changed', before, after: nextAssigneeId },
+        tx
+      );
+      return { ticket: updated, changed: true };
+    });
+  }
+
+  async function getSummary({ status, priority }, requester) {
+    const args = { status, priority };
+    if (requester.role === 'requester') {
+      args.requesterId = requester.id;
+    }
+    return ticketRepository.summary(args);
+  }
+
+  return {
+    create,
+    list,
+    getById,
+    changeStatus,
+    addComment,
+    listComments,
+    listHistory,
+    remove,
+    changePriority,
+    changeAssignee,
+    getSummary,
+  };
 }

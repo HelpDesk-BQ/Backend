@@ -31,6 +31,57 @@ export async function updateStatus({ id, status }, db = { query }) {
   return result.rows[0] || null;
 }
 
+export async function softDelete(id, db = { query }) {
+  const result = await db.query(
+    `UPDATE tickets SET deleted_at = now(), updated_at = now()
+     WHERE id = $1 AND deleted_at IS NULL
+     RETURNING ${TICKET_COLUMNS}`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
+export async function updatePriority({ id, priority }, db = { query }) {
+  const result = await db.query(
+    `UPDATE tickets SET priority = $2, updated_at = now()
+     WHERE id = $1 AND deleted_at IS NULL
+     RETURNING ${TICKET_COLUMNS}`,
+    [id, priority]
+  );
+  return result.rows[0] || null;
+}
+
+export async function updateAssignee({ id, assigneeId }, db = { query }) {
+  const result = await db.query(
+    `UPDATE tickets SET assignee_id = $2, updated_at = now()
+     WHERE id = $1 AND deleted_at IS NULL
+     RETURNING ${TICKET_COLUMNS}`,
+    [id, assigneeId]
+  );
+  return result.rows[0] || null;
+}
+
+export async function summary({ status, priority, requesterId }, db = { query }) {
+  const { where, values } = buildFilters({ status, priority, requesterId });
+  const [totalResult, byStatusResult, byPriorityResult] = await Promise.all([
+    db.query(`SELECT COUNT(*) AS count FROM tickets ${where}`, values),
+    db.query(`SELECT status, COUNT(*) AS count FROM tickets ${where} GROUP BY status ORDER BY status`, values),
+    db.query(
+      `SELECT priority, COUNT(*) AS count FROM tickets ${where} GROUP BY priority ORDER BY priority`,
+      values
+    ),
+  ]);
+  const byStatus = {};
+  for (const row of byStatusResult.rows) {
+    byStatus[row.status] = Number(row.count);
+  }
+  const byPriority = {};
+  for (const row of byPriorityResult.rows) {
+    byPriority[row.priority] = Number(row.count);
+  }
+  return { total: Number(totalResult.rows[0].count), byStatus, byPriority };
+}
+
 function buildFilters({ status, priority, requesterId }) {
   const conditions = ['deleted_at IS NULL'];
   const values = [];

@@ -35,6 +35,9 @@ export function createApp({ corsOrigins = [], container = null } = {}) {
   if (activeContainer.ticketRoutes) {
     app.use('/api', activeContainer.ticketRoutes);
   }
+  if (activeContainer.reportRoutes) {
+    app.use('/api', activeContainer.reportRoutes);
+  }
   app.use(notFound);
   app.use(errorHandler);
 

@@ -129,7 +129,46 @@ Falhas (mensagens genéricas — nunca revelam se o e-mail existe):
 | Conta bloqueada (3 falhas/5min → 10min) | 423 | `ACCOUNT_LOCKED` (`Acesso temporariamente indisponível.`) |
 | Body malformado (e-mail inválido, campo ausente/extra) | 400 | `VALIDATION_ERROR` (`Revise os campos destacados.`) |
 
-### 4.3 Rotas autenticadas (padrão das próximas entregas)
+### 4.3 `POST /api/tickets` — criar chamado (RF03, RF04, RF05)
+
+Autenticado. Dono (`requester_id`) sempre extraído do token — campo no body é rejeitado (objeto estrito).
+
+```bash
+curl -i -X POST http://localhost:3000/api/tickets \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"title":"Impressora do setor fiscal parou","description":"A impressora parou de responder após a última atualização do sistema.","priority":"high"}'
+```
+
+```http
+HTTP/1.1 201 Created
+
+{ "data": { "id": "...", "title": "...", "description": "...", "priority": "high",
+  "status": "open", "requester_id": "...", "assignee_id": null, ... } }
+```
+
+Validação (Zod exato do Passo 30): `title` trim 10–100, `description` trim 30–5000, `priority` em `low|medium|high|critical`. Fora disso → `400 VALIDATION_ERROR`.
+
+### 4.4 `GET /api/tickets` — listar com filtros e paginação (RF06, RF09)
+
+Query: `status?` (`open|analysis|in_progress|resolved|closed`), `priority?`, `page?` (≥1, padrão 1), `limit?` (1–100, padrão 20).
+
+```bash
+curl -s "http://localhost:3000/api/tickets?status=open&priority=high" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{ "data": { "items": [ ... ], "total": 1, "page": 1, "limit": 20 } }
+```
+
+Regra de visibilidade: solicitante recebe só os próprios (filtro de dono forçado); técnico e admin sem restrição de dono. Filtro inválido → `400 VALIDATION_ERROR`.
+
+### 4.5 `GET /api/tickets/:id` — detalhe
+
+`200` com o chamado; inexistente ou excluído → `404 NOT_FOUND`; de outro dono (solicitante) ou fechado (técnico) → `403 FORBIDDEN` (`Ação não autorizada.`).
+
+### 4.6 Rotas autenticadas (padrão geral)
 
 Rota protegida exige:
 
@@ -145,7 +184,7 @@ HTTP/1.1 401 Unauthorized
 { "error": { "code": "UNAUTHORIZED", "message": "Autenticação necessária.", "correlationId": "..." } }
 ```
 
-### 4.4 Erros de infraestrutura (todas as rotas)
+### 4.7 Erros de infraestrutura (todas as rotas)
 
 | Situação                         | HTTP | `code`              |
 | -------------------------------- | ---- | ------------------- |
@@ -211,6 +250,9 @@ Tabelas (migrations em `migrations/`, `up` + `down`):
 
 - `users(id, name, email UNIQUE, password_hash, role CHECK requester|technician|admin, active, created_at, updated_at)` + índice único em `email`.
 - `login_attempts(id, user_id → users NULL ON DELETE CASCADE, email, success, created_at)` + índices `(email, created_at)` e `(user_id, created_at)` (janela de bloqueio).
+- `tickets(id, title VARCHAR(100) CHECK ≥10, description CHECK ≥30, priority CHECK low|medium|high|critical, status CHECK + DEFAULT 'open', requester_id → users, assignee_id NULL → users, created_at, updated_at, deleted_at NULL)` + `idx_ticket_filter(status, priority)` e índices em `requester_id`/`assignee_id`.
+- `comments(id, ticket_id → tickets CASCADE, author_id → users, body CHECK 1–1000, is_resolution DEFAULT false, created_at)` + índice `(ticket_id, created_at)`.
+- `ticket_history(id, ticket_id → tickets CASCADE, actor_id → users, event, before NULL, after NULL, created_at)` + índice `(ticket_id, created_at)`.
 - `pgcrypto` para `gen_random_uuid()`; datas `timestamptz` (UTC).
 
 Fluxo: `npm run db:create` → `npm run migrate` → `npm run db:seed`.
@@ -220,8 +262,8 @@ contra o banco local.
 ## 9. Testes e qualidade
 
 ```
-tests/unit         → regras puras (authService, env, correlation, AppError, repositories, container)
-tests/integration  → contrato HTTP (errors, hardening, health, sessions, requireAuth)
+tests/unit         → regras puras (authService, ticketService, env, correlation, AppError, repositories, container)
+tests/integration  → contrato HTTP (errors, hardening, health, sessions, tickets, requireAuth)
 ```
 
 - TDD/Shift-Left: testes antes do código nos fluxos críticos; relógio e dependências

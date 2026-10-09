@@ -13,6 +13,8 @@ export const JSON_LIMIT = '100kb';
 function buildCorsOptions(corsOrigins) {
   return {
     origin: corsOrigins,
+    // Necessário para o navegador enviar o cookie httpOnly (fetch credentials:include).
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
     maxAge: 600,
@@ -37,6 +39,9 @@ export function createApp({ corsOrigins = [], container = null } = {}) {
   }
   if (activeContainer.reportRoutes) {
     app.use('/api', activeContainer.reportRoutes);
+  }
+  if (activeContainer.userRoutes) {
+    app.use('/api', activeContainer.userRoutes);
   }
   app.use(notFound);
   app.use(errorHandler);

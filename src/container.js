@@ -8,10 +8,13 @@ import * as commentRepository from './repositories/commentRepository.js';
 import * as historyRepository from './repositories/historyRepository.js';
 import { withTransaction } from './db/pool.js';
 import { createTicketService } from './services/ticketService.js';
+import { createUserService } from './services/userService.js';
 import { createReportRoutes } from './routes/report.routes.js';
+import { createUserRoutes } from './routes/user.routes.js';
 import { createSessionRoutes } from './routes/session.routes.js';
 import { createTicketRoutes } from './routes/ticket.routes.js';
 import { createRequireAuth } from './middlewares/requireAuth.js';
+import { expiresInToMs } from './utils/cookies.js';
 
 export function buildContainer(env) {
   const authService = createAuthService({
@@ -34,13 +37,22 @@ export function buildContainer(env) {
     withTransaction,
   });
   const requireAuth = createRequireAuth({ verifyToken });
+  // Cookie só com Secure em produção (dev local é HTTP); expiração espelha o JWT.
+  const sessionCookie = {
+    secure: env.NODE_ENV === 'production',
+    maxAgeMs: expiresInToMs(env.JWT_EXPIRES_IN),
+  };
+
+  const userService = createUserService({ userRepository });
 
   return {
     authService,
     ticketService,
+    userService,
     requireAuth,
-    sessionRoutes: createSessionRoutes({ authService }),
+    sessionRoutes: createSessionRoutes({ authService, sessionCookie, requireAuth }),
     ticketRoutes: createTicketRoutes({ ticketService, requireAuth }),
     reportRoutes: createReportRoutes({ ticketService, requireAuth }),
+    userRoutes: createUserRoutes({ userService, requireAuth }),
   };
 }

@@ -8,9 +8,7 @@ import * as commentRepository from './repositories/commentRepository.js';
 import * as historyRepository from './repositories/historyRepository.js';
 import { withTransaction } from './db/pool.js';
 import { createTicketService } from './services/ticketService.js';
-import { createUserService } from './services/userService.js';
 import { createReportRoutes } from './routes/report.routes.js';
-import { createUserRoutes } from './routes/user.routes.js';
 import { createSessionRoutes } from './routes/session.routes.js';
 import { createTicketRoutes } from './routes/ticket.routes.js';
 import { createRequireAuth } from './middlewares/requireAuth.js';
@@ -43,16 +41,12 @@ export function buildContainer(env) {
     maxAgeMs: expiresInToMs(env.JWT_EXPIRES_IN),
   };
 
-  const userService = createUserService({ userRepository });
-
   return {
     authService,
     ticketService,
-    userService,
     requireAuth,
     sessionRoutes: createSessionRoutes({ authService, sessionCookie, requireAuth }),
     ticketRoutes: createTicketRoutes({ ticketService, requireAuth }),
     reportRoutes: createReportRoutes({ ticketService, requireAuth }),
-    userRoutes: createUserRoutes({ userService, requireAuth }),
   };
 }

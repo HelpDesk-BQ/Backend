@@ -237,13 +237,21 @@ curl -s "http://localhost:3000/api/reports/summary?status=open" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### 4.12 Logs estruturados (RNF07)
+### 4.12 `GET /api/users` — listagem para atribuição (RF08)
+
+Query opcional `role?` (`requester|technician|admin`). Técnico/admin apenas
+(solicitante → `403`). Retorna colunas públicas (`id, name, email, role`) —
+nunca `password_hash`. Sessão também via cookie `helpdesk_token` (`HttpOnly`,
+`SameSite=Lax`); `POST /api/sessions/logout` limpa; `GET /api/sessions/me`
+devolve `{ id, role }`.
+
+### 4.13 Logs estruturados (RNF07)
 
 `src/utils/logger.js`: `{ level, event, timestamp, correlationId, route, status, ... }`
 em JSON por linha no stdout. Eventos: `session.created`, `ticket.created`,
 `ticket.status.changed`, `comment.added`, `ticket.deleted`. Nunca senha, token ou corpo sensível.
 
-### 4.13 Rotas autenticadas (padrão geral)
+### 4.14 Rotas autenticadas (padrão geral)
 
 Rota protegida exige:
 
@@ -259,7 +267,7 @@ HTTP/1.1 401 Unauthorized
 { "error": { "code": "UNAUTHORIZED", "message": "Autenticação necessária.", "correlationId": "..." } }
 ```
 
-### 4.14 Erros de infraestrutura (todas as rotas)
+### 4.15 Erros de infraestrutura (todas as rotas)
 
 | Situação                         | HTTP | `code`              |
 | -------------------------------- | ---- | ------------------- |

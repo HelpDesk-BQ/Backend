@@ -21,6 +21,22 @@ export async function findById(id, db = { query }) {
   return result.rows[0] || null;
 }
 
+const PUBLIC_USER_COLUMNS = 'id, name, email, role, active, created_at, updated_at';
+
+export async function listUsers({ role } = {}, db = { query }) {
+  if (role) {
+    const result = await db.query(
+      `SELECT ${PUBLIC_USER_COLUMNS} FROM users WHERE role = $1 AND active = true ORDER BY name ASC`,
+      [role]
+    );
+    return result.rows;
+  }
+  const result = await db.query(
+    `SELECT ${PUBLIC_USER_COLUMNS} FROM users WHERE active = true ORDER BY name ASC`
+  );
+  return result.rows;
+}
+
 export async function create({ name, email, passwordHash, role = 'requester' }, db = { query }) {
   const result = await db.query(
     `INSERT INTO users (name, email, password_hash, role)
